@@ -1,125 +1,87 @@
-const canvas = document.getElementById('c')
-const ctx = canvas.getContext('2d')
+/*
+	This pen cleverly utilizes SVG filters to create a "Morphing Text" effect. Essentially, it layers 2 text elements on top of each other, and blurs them depending on which text element should be more visible. Once the blurring is applied, both texts are fed through a threshold filter together, which produces the "gooey" effect. Check the CSS - Comment the #container rule's filter out to see how the blurring works!
+*/
 
-const logoEl = document.getElementById('logo')
-const container = document.getElementById('container')
+const elts = {
+  text1: document.getElementById("text1"),
+  text2: document.getElementById("text2"),
+};
 
-let width = canvas.width = window.innerWidth
-let height = canvas.height = window.innerHeight
+// The strings to morph between. You can change these to anything you want!
+const texts = ["Portfolio", "under", "construction 🚧"];
 
-/* Helper functions */
-const clamp = (val, min, max) => (
-  Math.min(Math.max(min, val), max)
-)
+// Controls the speed of morphing.
+const morphTime = 1;
+const cooldownTime = 0.25;
 
-const rand = (min, max) => (
-  Math.floor((Math.random() * (max - min + 1)) + min)
-)
+let textIndex = texts.length - 1;
+let time = new Date();
+let morph = 0;
+let cooldown = cooldownTime;
 
-/* Element classes */
-class Logo {
-  constructor(x, y) {
-    this.color = rand(0, COLORS.length-1)
-    this.x = x; this.y = y
-    this.vx = this.vy = 0
+elts.text1.textContent = texts[textIndex % texts.length];
+elts.text2.textContent = texts[(textIndex + 1) % texts.length];
+
+function doMorph() {
+  morph -= cooldown;
+  cooldown = 0;
+
+  let fraction = morph / morphTime;
+
+  if (fraction > 1) {
+    cooldown = cooldownTime;
+    fraction = 1;
   }
-  
-  changeColor() {
-    const newCol = rand(0, COLORS.length-1)
-    if (newCol === this.color) this.changeColor()
-    else this.color = newCol
-  }
-  
-  draw() {
-    const { x, y, color } = this
-    ctx.drawImage(logoImgs[color], 
-      x - logoDim.w_half,
-      y - logoDim.h_half,
-      logoDim.w, logoDim.h
-    )
-  }
-  
-  _bounded() {
-    const { x, y } = this
-    const { w_half, h_half } = logoDim
-    
-    // rebound on hit
-    if (x < w_half || x > width-w_half) {
-      this.changeColor()
-      this.x = clamp(x, w_half, width-w_half)
-      this.vx *= -1
-    }
-      
-    if (y < h_half || y > height-h_half) {
-      this.changeColor()
-      this.y = clamp(y, h_half, height-h_half)
-      this.vy *= -1
-    }    
-  }
-  
-  update(fn, bound) {
-    if (fn) fn.call(this)
-    if (bound) this._bounded()
-    this.draw()
-  }
+
+  setMorph(fraction);
 }
 
-/* controllable params */
-const COLORS = ['blue', 'red', 'white', 'green', 'orange', 'cyan', 'grey', 'purple', 'yellow', 'brown'],
-      SPEED = 3
+// A lot of the magic happens here, this is what applies the blur filter to the text.
+function setMorph(fraction) {
+  // fraction = Math.cos(fraction * Math.PI) / -2 + .5;
 
-/* environmental vars */
-let logoImgs = []
-let logoDim = { 
-  w: 0, h: 0,
-  get w_half() { return this.w/2 },
-  get h_half() { return this.h/2 }
+  elts.text2.style.filter = `blur(${Math.min(8 / fraction - 8, 100)}px)`;
+  elts.text2.style.opacity = `${Math.pow(fraction, 0.4) * 100}%`;
+
+  fraction = 1 - fraction;
+  elts.text1.style.filter = `blur(${Math.min(8 / fraction - 8, 100)}px)`;
+  elts.text1.style.opacity = `${Math.pow(fraction, 0.4) * 100}%`;
+
+  elts.text1.textContent = texts[textIndex % texts.length];
+  elts.text2.textContent = texts[(textIndex + 1) % texts.length];
 }
 
-/* canvas elements */
-const logo = new Logo(width/2, height/2)
+function doCooldown() {
+  morph = 0;
 
+  elts.text2.style.filter = "";
+  elts.text2.style.opacity = "100%";
 
-/* Initial set-up */
-function init() {
-  // get dimensions of logo
-  logoDim.w = logoEl.clientWidth
-  logoDim.h = logoEl.clientHeight
-  
-  // get image data for each logo colour
-  const logoStr = (new XMLSerializer).serializeToString(logoEl);
-  logoImgs = COLORS.map((col) => {
-    const img = new Image()
-    img.src = `data:image/svg+xml;charset=utf-8,${
-      logoStr.replace('white', col)
-    }`
-    return img
-  })
-  
-  // set initial velocity
-  logo.vx = -SPEED
-  logo.vy = SPEED
+  elts.text1.style.filter = "";
+  elts.text1.style.opacity = "0%";
 }
 
-/* Main animation routine */
+// Animation loop, which is called every frame.
 function animate() {
-  requestAnimationFrame(animate)
-  ctx.clearRect(0, 0, width, height)
-  
-  // draw elements
-  logo.update(function() {
-    this.x += this.vx
-    this.y += this.vy
-  }, true)
+  requestAnimationFrame(animate);
+
+  let newTime = new Date();
+  let shouldIncrementIndex = cooldown > 0;
+  let dt = (newTime - time) / 1000;
+  time = newTime;
+
+  cooldown -= dt;
+
+  if (cooldown <= 0) {
+    if (shouldIncrementIndex) {
+      textIndex++;
+    }
+
+    doMorph();
+  } else {
+    doCooldown();
+  }
 }
 
-init()
-animate()
-
-/* Event Listeners */
-window.addEventListener('resize', () => {
-  width = canvas.width = window.innerWidth
-  height = canvas.height = window.innerHeight
-  logoDim.w = logoEl.clientWidth
-  logoDim.h = logoEl.clientHeight
-})
+// Start the animation.
+animate();
